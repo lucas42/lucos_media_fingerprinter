@@ -4,7 +4,6 @@
 #include <chromaprint.h>
 #include <ftw.h>
 #include <stdlib.h>
-#include <sqlite3.h>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -15,7 +14,6 @@
 ChromaprintContext *chromaprint_ctx;
 int max_length = 60;
 int16_t *buffer;
-sqlite3 *db;
 
 int decode_audio_file(const char *file_name, int max_length, int *duration)
 {
@@ -178,55 +176,11 @@ int decode_audio_file(const char *file_name, int max_length, int *duration)
 }
 
 int save_to_db(const char *path, int duration, char *fingerprint) {
-	int rc;
-	sqlite3_stmt *stmt;
-	
 	printf("Save Path=%s, DURATION=%d\n", path, duration);
-	
-	rc = sqlite3_prepare_v2(db, "REPLACE INTO track_path_fingerprint (path, fingerprint) VALUES (?, ?)",-1,&stmt,0);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "SQL [1] prepare error: %d\n", rc);
-		fprintf(stderr, "SQL [1] ERROR: %s\n", sqlite3_errmsg(db));
-	} else {
-		sqlite3_bind_text(stmt, 1, path, -1, SQLITE_TRANSIENT);
-		sqlite3_bind_text(stmt, 2, fingerprint, -1, SQLITE_TRANSIENT);
-		rc = sqlite3_step(stmt);
-		if (rc != SQLITE_DONE) {
-			fprintf(stderr, "SQL [1] step error: %d\n", rc);
-			fprintf(stderr, "SQL [1] ERROR: %s\n", sqlite3_errmsg(db));
-		}
-	}
-	
-	rc = sqlite3_prepare_v2(db, "INSERT OR IGNORE INTO track (fingerprint) VALUES (?)",-1,&stmt,0);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "SQL [2] prepare error: %d\n", rc);
-		fprintf(stderr, "SQL [2] ERROR: %s\n", sqlite3_errmsg(db));
-	} else {
-		sqlite3_bind_text(stmt, 1, fingerprint, -1, SQLITE_TRANSIENT);
-		rc = sqlite3_step(stmt);
-		if (rc != SQLITE_DONE) {
-			fprintf(stderr, "SQL [2] step error: %d\n", rc);
-			fprintf(stderr, "SQL [2] ERROR: %s\n", sqlite3_errmsg(db));
-		}
-	}
-	sqlite3_prepare_v2(db, "SELECT rowid FROM track WHERE id = ?", -1, &stmt, 0);
-	sqlite3_bind_int(stmt, 1, (int)sqlite3_last_insert_rowid(db));
-	sqlite3_step(stmt);
-	printf("Last rowid: %d\n", (int)sqlite3_column_int(stmt, 0));
-	
-	rc = sqlite3_prepare_v2(db, "UPDATE track SET duration = ? WHERE fingerprint = ?",-1,&stmt,0);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "SQL [3] prepare error: %d\n", rc);
-		fprintf(stderr, "SQL [3] ERROR: %s\n", sqlite3_errmsg(db));
-	} else {
-		sqlite3_bind_int(stmt, 1, duration);
-		sqlite3_bind_text(stmt, 2, fingerprint, -1, SQLITE_TRANSIENT);
-		rc = sqlite3_step(stmt);
-		if (rc != SQLITE_DONE) {
-			fprintf(stderr, "SQL [3] step error: %d\n", rc);
-			fprintf(stderr, "SQL [3] ERROR: %s\n", sqlite3_errmsg(db));
-		}
-	}
+	char command[strlen(path) + (3 * strlen(fingerprint)) + 128];
+	sprintf(command, "curl -s \"%s/tracks/?fingerprint=%s\" -X PATCH -d \"{\\\"url\\\": \\\"%s%s\\\", \\\"duration\\\": %d}\"", getenv("APIURL"), fingerprint, getenv("BASEURL"), path, duration);
+	fflush(stdout);
+	system(command);
 	return 0;
 }
 
@@ -267,25 +221,21 @@ int main(int argc, char **argv)
 {
 	int i, num_file_names = 0;
 	char **file_names;
-	char *db_path = "../db/media.sqlite";
 
 	file_names = malloc(argc * sizeof(char *));
 	for (i = 1; i < argc; i++) {
 		char *arg = argv[i];
 		if (!strcmp(arg, "-length") && i + 1 < argc) {
 			max_length = atoi(argv[++i]);
-		} else if (!strcmp(arg, "-db") && i + 1 < argc) {
-			db_path = argv[++i];
 		} else {
 			file_names[num_file_names++] = argv[i];
 		}
 	}
 
-	if (!num_file_names) {
-		printf("usage: %s [OPTIONS] FILE...\n\n", argv[0]);
+	if (!num_file_names || (getenv("APIURL") == NULL) || (getenv("BASEURL") == NULL)) {
+		printf("usage: APIURL=https://api.example.com BASEURL=https://media.example.com %s [OPTIONS] FILE...\n\n", argv[0]);
 		printf("Options:\n");
 		printf("  -length SECS  length of the audio data used for fingerprint calculation (default 60)\n");
-		printf("  -db PATH  the path of the media sqlite database (default ../db/media.sqlite)\n");
 		return 2;
 	}
 
@@ -294,8 +244,6 @@ int main(int argc, char **argv)
 
 	buffer = av_malloc(BUFFER_SIZE + 16);
 	chromaprint_ctx = chromaprint_new(CHROMAPRINT_ALGORITHM_DEFAULT);
-	
-	sqlite3_open(db_path, &db);
 
 	for (i = 0; i < num_file_names; i++) {
 		ftw(file_names[i], decode_files, 1);
@@ -305,7 +253,6 @@ int main(int argc, char **argv)
 	chromaprint_free(chromaprint_ctx);
 	av_free(buffer);
 	free(file_names);
-    sqlite3_close(db);
 
 	return 1;
 }
