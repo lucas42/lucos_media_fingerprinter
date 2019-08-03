@@ -1,0 +1,16 @@
+version: '3'
+services:
+    fingerprinter:
+      build: .
+      container_name: lucos_media_fingerprinter
+      volumes:
+        - "medlib:/medlib"
+      image: lucas42/lucos_media_fingerprinter
+
+volumes:
+  medlib:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=aurora,rw,nolock,hard,nointr,nfsvers=3"
+      device: ":/medlib"
