@@ -232,12 +232,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!num_file_names || (getenv("APIURL") == NULL) || (getenv("BASEURL") == NULL)) {
-		printf("usage: APIURL=https://api.example.com BASEURL=https://media.example.com %s [OPTIONS] FILE...\n\n", argv[0]);
+	if ((getenv("APIURL") == NULL) || (getenv("BASEURL") == NULL) || (getenv("ROOTDIR") == NULL)) {
+		printf("usage: APIURL=https://api.example.com BASEURL=https://media.example.com ROOTDIR=/medialibrary %s [OPTIONS] [FILE...]\n\n", argv[0]);
 		printf("Options:\n");
 		printf("  -length SECS  length of the audio data used for fingerprint calculation (default 60)\n");
 		return 2;
 	}
+	file_names[num_file_names++] = getenv("ROOTDIR");
 
 	av_register_all();
 	av_log_set_level(AV_LOG_ERROR);
@@ -254,6 +255,6 @@ int main(int argc, char **argv)
 	av_free(buffer);
 	free(file_names);
 
-	return 1;
+	return 0;
 }
 

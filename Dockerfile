@@ -8,4 +8,4 @@ RUN apt-get install -y libavformat-dev=6:0.8.17-2 libavcodec-dev=6:0.8.17-2 liba
 COPY . .
 
 RUN ./build.sh
-CMD ["./fingerprinter", "/medlib/import/black/ceol srl/"]
+CMD ["./fingerprinter"]
