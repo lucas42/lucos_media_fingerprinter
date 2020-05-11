@@ -1,4 +1,4 @@
-FROM gcc:9
+FROM gcc:10
 WORKDIR /usr/src/myapp
 
 RUN echo "deb http://archive.debian.org/debian/ wheezy main" > /etc/apt/sources.list.d/wheezy.list
